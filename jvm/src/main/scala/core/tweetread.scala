@@ -17,6 +17,9 @@ class TweetReaderActor(cluster: Cluster) extends Actor {
   val countAll = session.prepare("select count(*) from tweets;")
 
   import scala.collection.JavaConversions._
+  import cassandra.resultset._
+  import akka.pattern.pipe
+  import context.dispatcher
 
   def buildTweet(r: Row): Tweet = {
     val id = r.getString("key")
@@ -28,10 +31,10 @@ class TweetReaderActor(cluster: Cluster) extends Actor {
 
   def receive: Actor.Receive = {
     case CountAll         =>
-      sender ! session.execute(countAll.bind()).one().getLong(0)
+      session.executeAsync(countAll.bind()).map(_.one().getLong(0)) pipeTo sender
     case FindAll(maximum) =>
       val query = QueryBuilder.select().all().from(Keyspaces.akkaCassandra, "tweets").limit(maximum)
-      sender ! session.execute(query).all().map(buildTweet).toList
+      session.executeAsync(query).map(_.all().map(buildTweet).toList) pipeTo sender
 
   }
 }
